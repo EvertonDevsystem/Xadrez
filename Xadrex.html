@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Xadrez Funcional — Regras Oficiais & IA</title>
+    <!-- Biblioteca de Confetes para a Vitória -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --panel-bg: rgba(255, 255, 255, 0.04);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --primary-color: #10b981;
+            --secondary-color: #059669;
+            --card-bg: #131b2e;
+            --text-color: #f1f5f9;
+            --hover-color: #1e293b;
+            --max-container-width: 820px;
+            --cell-size: 62px;
+            --piece-font: 2.6rem;
+        }
+
+        /* Modos de Tela / Dispositivo (Dinâmicos) */
+        body.device-desktop { 
+            --max-container-width: 950px; 
+            --cell-size: 72px; 
+            --piece-font: 3rem; 
+        }
+        body.device-tablet { 
+            --max-container-width: 700px; 
+            --cell-size: 54px; 
+            --piece-font: 2.2rem; 
+        }
+        body.device-mobile { 
+            --max-container-width: 380px; 
+            --cell-size: 38px; 
+            --piece-font: 1.6rem; 
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 15px;
+            overflow-x: hidden;
+            position: relative;
+            transition: background 0.4s ease;
+        }
+
+        #bgCanvas {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 0;
+        }
+
+        /* Top Bar e Menu */
+        .top-bar {
+            width: 100%;
+            max-width: var(--max-container-width);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            z-index: 10;
+        }
+
+        .game-title {
+            font-size: 1.5rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--primary-color);
+            text-shadow: 0 0 20px rgba(16, 185, 129, 0.35);
+            letter-spacing: 0.5px;
+        }
+
+        .menu-buttons-group { display: flex; gap: 10px; }
+        .menu-icon-btn {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            font-size: 1.3rem;
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.25s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 10;
+        }
+        .menu-icon-btn:hover {
+            background: var(--hover-color);
+            border-color: var(--primary-color);
+            transform: translateY(-2px);
+        }
+
+        /* Container Principal */
+        .main-container {
+            display: flex;
+            gap: 30px;
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+            border: 1px solid var(--border-color);
+            align-items: flex-start;
+            max-width: 95vw;
+            z-index: 10;
+            transition: all 0.3s ease;
+        }
+
+        /* Tabuleiro Dinâmico */
+        .board-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(8, var(--cell-size));
+            grid-template-rows: repeat(8, var(--cell-size));
+            border: 6px solid #1e293b;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transition: all 0.3s ease;
+        }
+
+        .square {
+            width: var(--cell-size);
+            height: var(--cell-size);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: var(--piece-font);
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+        }
+
+        .square.light { background-color: #e2e8f0; }
+        .square.dark { background-color: #64748b; }
+
+        .piece-white {
+            color: #ffffff !important;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));
+        }
+
+        .piece-black {
+            color: #0f172a !important;
+            filter: drop-shadow(0 2px 4px rgba(255,255,255,0.25));
+        }
+
+        .square:hover { filter: brightness(1.1); }
+
+        .square.selected {
+            background-color: rgba(16, 185, 129, 0.45) !important;
+            box-shadow: inset 0 0 12px rgba(16, 185, 129, 0.6);
+        }
+
+        .square.highlight {
+            position: relative;
+            background-color: rgba(16, 185, 129, 0.2) !important;
+        }
+
+        .square.highlight::after {
+            content: '';
+            width: calc(var(--cell-size) * 0.35);
+            height: calc(var(--cell-size) * 0.35);
+            background-color: rgba(16, 185, 129, 0.8);
+            border-radius: 50%;
+            position: absolute;
+            box-shadow: 0 0 8px var(--primary-color);
+        }
+
+        /* Painel Lateral do Jogo */
+        .side-panel {
+            width: 260px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        body.device-mobile .side-panel {
+            width: 100%;
+        }
+
+        .status-box {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 12px;
+            border-radius: 10px;
+            text-align: center;
+            font-weight: 700;
+            border: 1px solid var(--border-color);
+            color: var(--primary-color);
+            font-size: 0.95rem;
+            letter-spacing: 0.3px;
+        }
+
+        .captured-box {
+            background: rgba(0, 0, 0, 0.25);
+            padding: 10px;
+            border-radius: 10px;
+            min-height: 50px;
+            border: 1px solid var(--border-color);
+            font-size: 1.2rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-content: flex-start;
+        }
+
+        .section-label {
+            font-size: 0.8rem;
+            color: #94a3b8;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: -6px;
+        }
+
+        .history-box {
+            background: #080c14;
+            height: 130px;
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+            padding: 10px;
+            overflow-y: auto;
+            font-size: 0.82rem;
+            color: #cbd5e1;
+            font-family: monospace;
+        }
+
+        .btn-restart {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+        }
+        .btn-restart:hover {
+            filter: brightness(1.1);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+        }
+
+        /* Menu Lateral (Gaveta Drawer) */
+        .side-menu {
+            position: fixed; top: 0; right: -100%; width: 100%; max-width: 340px;
+            height: 100%; background: #0f172a; backdrop-filter: blur(20px);
+            border-left: 1px solid var(--border-color); box-shadow: -10px 0 40px rgba(0,0,0,0.7);
+            transition: right 0.35s cubic-bezier(0.16, 1, 0.3, 1); z-index: 1000; padding: 25px;
+            display: flex; flex-direction: column; gap: 18px; overflow-y: auto;
+        }
+        .side-menu.open { right: 0; }
+        
+        .menu-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; }
+        .menu-header h2 { font-size: 1.2rem; color: var(--primary-color); font-weight: 700; }
+        
+        .close-menu-btn {
+            background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #f87171; padding: 10px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; text-align: center;
+            transition: 0.2s;
+        }
+        .close-menu-btn:hover { background: rgba(239, 68, 68, 0.25); }
+        .close-icon { background: none; border: none; color: var(--text-color); font-size: 1.3rem; cursor: pointer; }
+
+        .menu-section { display: flex; flex-direction: column; gap: 8px; }
+        .menu-section p { font-size: 0.83rem; color: #94a3b8; line-height: 1.4; }
+
+        .accordion-btn {
+            background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); color: var(--text-color);
+            width: 100%; padding: 12px; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 0.9rem;
+            display: flex; justify-content: space-between; align-items: center; transition: all 0.2s ease;
+        }
+        .accordion-btn:hover { background: rgba(255, 255, 255, 0.07); border-color: var(--primary-color); }
+        
+        .accordion-content { max-height: 0; overflow: hidden; transition: max-height 0.35s ease-out; display: flex; flex-direction: column; gap: 6px; }
+        .accordion-content.open { max-height: 420px; margin: 6px 0; overflow-y: auto; padding-right: 4px; }
+        
+        .side-menu select, .side-menu input {
+            width: 100%; padding: 11px; background-color: #080c14; border: 1px solid var(--border-color); color: var(--text-color); border-radius: 8px; outline: none; font-size: 0.9rem; transition: border-color 0.2s;
+        }
+        .side-menu select:focus, .side-menu input:focus { border-color: var(--primary-color); }
+
+        .color-picker-wrapper { display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); padding: 10px 14px; border-radius: 8px; }
+        input[type="color"] { -webkit-appearance: none; border: none; width: 40px; height: 32px; border-radius: 6px; cursor: pointer; background: none; }
+
+        button.action-btn { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-color); padding: 11px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.88rem; width: 100%; text-align: left; transition: all 0.2s ease; display: flex; align-items: center; gap: 8px; }
+        button.action-btn:hover { background: var(--hover-color); border-color: var(--primary-color); color: var(--primary-color); transform: translateX(3px); }
+        button.action-btn.active { background: rgba(16, 185, 129, 0.15); border-color: var(--primary-color); color: var(--primary-color); font-weight: 700; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 5px; }
+        th, td { padding: 9px 6px; border-bottom: 1px solid var(--border-color); text-align: center; }
+        th { color: var(--primary-color); font-weight: 600; }
+
+        footer {
+            margin-top: auto; font-size: 0.75rem; color: #64748b; text-align: center; padding-top: 10px; border-top: 1px solid var(--border-color);
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="bgCanvas"></canvas>
+
+    <header class="top-bar">
+        <div class="game-title">♟️ Xadrez Funcional</div>
+        <div class="menu-buttons-group">
+            <button class="menu-icon-btn" onclick="toggleMenu('top10Menu')" title="Placar">🏆</button>
+            <button class="menu-icon-btn" onclick="toggleMenu('mainMenu')" title="Menu Principal">☰</button>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <!-- Tabuleiro -->
+        <div class="board-container">
+            <div class="board" id="chessboard"></div>
+        </div>
+
+        <!-- Painel Lateral -->
+        <div class="side-panel">
+            <div class="status-box" id="gameStatus">Vez das Brancas (⚪)</div>
+            
+            <span class="section-label">Capturadas (Pretas):</span>
+            <div class="captured-box" id="capturedBlack"></div>
+
+            <span class="section-label">Histórico:</span>
+            <div class="history-box" id="moveHistory"></div>
+
+            <span class="section-label">Capturadas (Brancas):</span>
+            <div class="captured-box" id="capturedWhite"></div>
+
+            <button class="btn-restart" id="restartBtn">Reiniciar Jogo</button>
+        </div>
+    </div>
+
+    <!-- Menu Principal (Gaveta Hambúrguer) -->
+    <div id="mainMenu" class="side-menu" onclick="event.stopPropagation()">
+        <div class="menu-header">
+            <h2>Opções do Jogo</h2>
+            <button class="close-icon" onclick="toggleMenu('mainMenu')">✕</button>
+        </div>
+
+        <button class="close-menu-btn" onclick="toggleMenu('mainMenu')">Fechar Menu</button>
+
+        <div class="menu-section">
+            <p>Desenvolvido para Etec Professor José Carlos Seno Junior 🚀</p>
+        </div>
+
+        <!-- Modo de Tela -->
+        <div class="menu-section">
+            <label style="font-size: 0.83rem; font-weight: 600; color: var(--primary-color);">💻 Modo de Tela (Dispositivo):</label>
+            <select id="seletorDispositivo" onchange="mudarDispositivo(this.value)">
+                <option value="auto" selected>Padrão (Automático)</option>
+                <option value="desktop">Computador (Desktop)</option>
+                <option value="tablet">Tablet</option>
+                <option value="mobile">Celular (Mobile)</option>
+            </select>
+        </div>
+
+        <!-- Animações de Fundo (20+ Opções) -->
+        <div class="menu-section">
+            <button class="accordion-btn" onclick="toggleAccordion('acc-anim')">
+                <span>🌌 Animações de Fundo (20+)</span>
+                <span>▼</span>
+            </button>
+            <div id="acc-anim" class="accordion-content">
+                <button class="action-btn active" id="anim-particles" onclick="mudarAnimacao('particles')">✨ Partículas Neon</button>
+                <button class="action-btn" id="anim-matrix" onclick="mudarAnimacao('matrix')">🌧️ Chuva Digital (Matrix)</button>
+                <button class="action-btn" id="anim-stars" onclick="mudarAnimacao('stars')">⭐ Estrelas Cadentes</button>
+                <button class="action-btn" id="anim-crowns" onclick="mudarAnimacao('crowns')">👑 Chuva de Coroas</button>
+                <button class="action-btn" id="anim-snow" onclick="mudarAnimacao('snow')">❄️ Neve Invernal</button>
+                <button class="action-btn" id="anim-fire" onclick="mudarAnimacao('fire')">🔥 Chamas Subindo</button>
+                <button class="action-btn" id="anim-bubbles" onclick="mudarAnimacao('bubbles')">🫧 Bolhas Flutuantes</button>
+                <button class="action-btn" id="anim-rain" onclick="mudarAnimacao('rain')">💧 Chuva Estilizada</button>
+                <button class="action-btn" id="anim-confetti" onclick="mudarAnimacao('confetti')">🎉 Confetes Contínuos</button>
+                <button class="action-btn" id="anim-nebula" onclick="mudarAnimacao('nebula')">🌌 Nebulosa Pulsante</button>
+                <button class="action-btn" id="anim-lightning" onclick="mudarAnimacao('lightning')">⚡ Raios Elétricos</button>
+                <button class="action-btn" id="anim-plasma" onclick="mudarAnimacao('plasma')">🌀 Ondas de Plasma</button>
+                <button class="action-btn" id="anim-comets" onclick="mudarAnimacao('comets')">🌠 Cometas Rápidos</button>
+                <button class="action-btn" id="anim-hearts" onclick="mudarAnimacao('hearts')">💖 Corações Flutuantes</button>
+                <button class="action-btn" id="anim-laser" onclick="mudarAnimacao('laser')">🔦 Feixes Laser</button>
+                <button class="action-btn" id="anim-cometrain" onclick="mudarAnimacao('cometrain')">💫 Poeira Cósmica</button>
+                <button class="action-btn" id="anim-sparkles" onclick="mudarAnimacao('sparkles')">✨ Brilhos Pulsantes</button>
+                <button class="action-btn" id="anim-rings" onclick="mudarAnimacao('rings')">🎯 Anéis de Energia</button>
+                <button class="action-btn" id="anim-vortex" onclick="mudarAnimacao('vortex')">🌀 Vórtice Espiral</button>
+                <button class="action-btn" id="anim-off" onclick="mudarAnimacao('off')">❌ Desligada</button>
+            </div>
+        </div>
+
+        <!-- Modificação de Cores e Temas -->
+        <div class="menu-section">
+            <button class="accordion-btn" onclick="toggleAccordion('acc-colors')">
+                <span>🎨 Temas & Cores de Fundo (20+)</span>
+                <span>▼</span>
+            </button>
+            <div id="acc-colors" class="accordion-content">
+                <div class="color-picker-wrapper">
+                    <label for="colorPicker" style="font-size: 0.85rem;">Cor do Destaque:</label>
+                    <input type="color" id="colorPicker" value="#10b981" onchange="mudarCorCustomizada(this.value)">
+                </div>
+                <label style="font-size: 0.8rem; font-weight: 600; margin-top: 4px; color: #94a3b8;">Paletas Prontas:</label>
+                <select id="seletorTemaFundo" onchange="mudarTemaFundo(this.value)">
+                    <option value="#0b0f19">Azul Meia-Noite (Padrão)</option>
+                    <option value="#121214">Escuro Neutro (Dark)</option>
+                    <option value="#120a1f">Roxo Místico</option>
+                    <option value="#1a0f1a">Sakura Rosa</option>
+                    <option value="#1a0b0b">Vermelho Fogo</option>
+                    <option value="#0b1a0b">Verde Esmeralda</option>
+                    <option value="#1a180b">Amarelo Dourado</option>
+                    <option value="#101820">Azul Oceano Profundo</option>
+                    <option value="#220022">Magenta Sombrio</option>
+                    <option value="#002222">Ciano Ártico</option>
+                    <option value="#1f1105">Bronze Antigo</option>
+                    <option value="#2b1a1f">Vinho Tinto</option>
+                    <option value="#0f1a1c">Azul Petróleo</option>
+                    <option value="#181324">Lilás Espacial</option>
+                    <option value="#261c14">Marrom Café</option>
+                    <option value="#1a1c13">Verde Militar</option>
+                    <option value="#1e1424">Violeta Noturno</option>
+                    <option value="#142422">Azul Esverdeado</option>
+                    <option value="#241416">Coral Escuro</option>
+                    <option value="#1c1c1c">Cinza Minimalista</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Modo de Jogo & IA -->
+        <div class="menu-section">
+            <button class="accordion-btn" onclick="toggleAccordion('acc-modo')">
+                <span>🎮 Modo de Jogo e Dificuldade IA</span>
+                <span>▼</span>
+            </button>
+            <div id="acc-modo" class="accordion-content">
+                <label style="font-size: 0.83rem; font-weight: 600;">Modo de Jogo:</label>
+                <select id="gameMode" onchange="mudarModoJogo()">
+                    <option value="local">2 Jogadores (Local)</option>
+                    <option value="ai" selected>Contra o Computador (IA)</option>
+                </select>
+
+                <div id="containerDificuldade" style="margin-top: 6px;">
+                    <label style="font-size: 0.83rem; font-weight: 600;">Dificuldade da I.A:</label>
+                    <select id="dificuldadeIA" onchange="mudarDificuldade()">
+                        <option value="facil">Fácil (Iniciante)</option>
+                        <option value="normal" selected>Normal (Equilibrado)</option>
+                        <option value="medio">Médio (Estratégico)</option>
+                        <option value="dificil">Difícil (Avançado)</option>
+                        <option value="infernal">Infernal (Mestre Brutal) 😈</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="menu-section">
+            <button class="action-btn" style="background: linear-gradient(135deg, #7f00ff, #e100ff); color: #fff; justify-content: center;" onclick="abrirAdminMenu()">🛡️ Painel Admin</button>
+        </div>
+
+        <footer>
+            Desenvolvido para Etec Professor José Carlos Seno Junior 🚀
+        </footer>
+    </div>
+
+    <!-- Menu Top 10 / Ranking -->
+    <div id="top10Menu" class="side-menu" onclick="event.stopPropagation()">
+        <div class="menu-header">
+            <h2>🏆 Placar de Partidas</h2>
+            <button class="close-icon" onclick="toggleMenu('top10Menu')">✕</button>
+        </div>
+        <button class="close-menu-btn" onclick="toggleMenu('top10Menu')">Fechar Menu</button>
+        <div class="menu-section">
+            <table>
+                <thead>
+                    <tr><th>Modo</th><th>Vitórias (B)</th><th>Vitórias (P)</th></tr>
+                </thead>
+                <tbody id="rankingTable">
+                    <tr><td>Local / IA</td><td id="scoreWhite">0</td><td id="scoreBlack">0</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Menu Painel Admin -->
+    <div id="adminMenu" class="side-menu" onclick="event.stopPropagation()">
+        <div class="menu-header">
+            <h2>🛡️ Painel Admin</h2>
+            <button class="close-icon" onclick="toggleMenu('adminMenu')">✕</button>
+        </div>
+        <button class="close-menu-btn" onclick="toggleMenu('adminMenu')">Fechar Menu</button>
+        <div class="menu-section" style="margin-top: 10px;">
+            <button class="action-btn" onclick="toggleModoSandbox()">🧪 Testador de Peças: <span id="statusSandbox" style="margin-left:auto;">DESLIGADO</span></button>
+            <button class="action-btn" onclick="esvaziarTabuleiro()">🧹 Deixar Tabuleiro Vazio</button>
+            <button class="action-btn" style="color: #f87171;" onclick="zerarPlacares()">🗑️ Zerar Placares</button>
+        </div>
+    </div>
+
+    <script>
+        function toggleMenu(id) {
+            document.querySelectorAll('.side-menu').forEach(m => { if (m.id !== id) m.classList.remove('open'); });
+            document.getElementById(id).classList.toggle('open');
+        }
+
+        function toggleAccordion(id) {
+            document.getElementById(id).classList.toggle('open');
+        }
+
+        function abrirAdminMenu() {
+            const senha = prompt("Senha de Administrador:");
+            if (senha === "XADREZ.EXE" || senha === "DAMAS.EXE") toggleMenu('adminMenu');
+            else if (senha !== null) alert("Senha incorreta!");
+        }
+
+        function mudarDispositivo(tipo) {
+            document.body.classList.remove('device-desktop', 'device-tablet', 'device-mobile');
+            if (tipo !== 'auto') {
+                document.body.classList.add(`device-${tipo}`);
+            }
+        }
+
+        function mudarTemaFundo(cor) {
+            document.documentElement.style.setProperty('--bg-color', cor);
+            document.body.style.backgroundColor = cor;
+        }
+
+        // ==========================================
+        // 🌌 MOTOR DE ANIMAÇÕES DO CANVAS
+        // ==========================================
+        const canvas = document.getElementById('bgCanvas');
+        const ctx = canvas.getContext('2d');
+        let animationFrameId = null;
+        let tipoAnimacao = 'particles';
+        let vitoriasBrancas = 0, vitoriasPretas = 0;
+        let modoSandboxAtivo = false;
+
+        function resizeCanvas() { 
+            canvas.width = window.innerWidth; 
+            canvas.height = window.innerHeight; 
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        let animObjs = [];
+        function initAnimationObjects() {
+            animObjs = [];
+            for(let i=0; i<40; i++) {
+                animObjs.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: Math.random() * 4 + 1,
+                    speedX: (Math.random() - 0.5) * 1.5,
+                    speedY: (Math.random() * 1.5 + 0.5) * -1,
+                    alpha: Math.random() * 0.7 + 0.2,
+                    angle: Math.random() * Math.PI * 2
+                });
+            }
+        }
+        initAnimationObjects();
+
+        function runAnimation() {
+            cancelAnimationFrame(animationFrameId);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const computedColor = getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim() || '#10b981';
+
+            ctx.fillStyle = computedColor;
+            ctx.strokeStyle = computedColor;
+
+            if (tipoAnimacao === 'particles') {
+                animObjs.forEach(p => {
+                    ctx.globalAlpha = p.alpha;
+                    ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+                    p.y += p.speedY; if(p.y < 0) p.y = canvas.height;
+                });
+            } else if (tipoAnimacao === 'matrix') {
+                ctx.font = 'bold 20px monospace';
+                animObjs.forEach(p => {
+                    ctx.globalAlpha = p.alpha;
+                    ctx.fillText('01XADREZ♟️'[Math.floor(Math.random()*10)], p.x, p.y);
+                    p.y += 12; if(p.y > canvas.height) p.y = 0;
+                });
+            } else if (tipoAnimacao === 'stars') {
+                animObjs.forEach(p => {
+                    ctx.globalAlpha = p.alpha;
+                    ctx.fillRect(p.x, p.y, p.size, p.size);
+                    p.x -= 1.5; if(p.x < 0) p.x = canvas.width;
+                });
+            } else if (tipoAnimacao === 'crowns') {
+                ctx.font = '24px serif';
+                animObjs.forEach(p => {
+                    ctx.globalAlpha = p.alpha;
+                    ctx.fillText('♔', p.x, p.y);
+                    p.y += 1.5; if(p.y > canvas.height) p.y = 0;
+                });
+            } else if (tipoAnimacao === 'snow') {
+                animObjs.forEach(p => {
+                    ctx.globalAlpha = p.alpha;
+                    ctx.beginPath(); ctx.arc(p.x, p.y, p.size * 0.8, 0, Math.PI * 2); ctx.fill();
+                    p.y += 1; p.x += Math.sin(p.y * 0.02) * 0.5;
+                    if(p.y > canvas.height) p.y = 0;
+                });
+            } else if (tipoAnimacao === 'fire') {
+                animObjs.forEach(p => {
+                    ctx.globalAlpha = p.alpha;
+                    ctx.beginPath(); ctx.arc(p.x, p.y, p.size * 1.2, 0, Math.PI * 2); ctx.fill();
+                    p.y -= 2; p.x += (Math.random() - 0.5) * 2;
+                    if(p.y < 0) p.y = canvas.height;
+                });
+            } else if (tipoAnimacao === 'bubbles') {
+                animObjs.forEach(p => {
+                    ctx.globalAlpha = p.alpha;
+                    ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.arc(p.x, p.y, p.size * 2, 0, Math.PI * 2); ctx.stroke();
+                    p.y -= 1.2; if(p.y < 0) p.y = canvas.height;
+                });
+            } else if (tipoAnimacao === 'rain') {
+                animObjs.forEach(p => {
+                    ctx.globalAlpha = p.alpha;
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - 1, p.y + 15); ctx.stroke();
+                    p.y += 6; if(p.y > canvas.height) p.y = 0;
+                });
+            } else if (tipoAnimacao === 'confetti') {
+                animObjs.forEach(p => {
+                    ctx.globalAlpha = p.alpha;
+                    ctx.fillRect(p.x, p.y, p.size * 2, p.size);
+                    p.y += 2; p.x += Math.sin(p.y * 0.05);
+                    if(p.y > canvas.height) p.y = 0;
+                });
+            } else if (tipoAnimacao === 'nebula') {
+                animObjs.forEach(p => {
+                    ctx.globalAlpha = p.alpha * 0.3;
+                    ctx.beginPath(); ctx.arc(p.x, p.y, p.size * 15, 0, Math.PI * 2); ctx.fill();
+                    p.x += p.speedX; p.y += p.speedY;
+                    if(p.x < 0 || p.x > canvas.width) p.speedX *= -1;
+                    if(p.y < 0 || p.y > canvas.height) p.speedY *= -1;
+                });
+            } else if (tipoAnimacao === 'lightning') {
+                ctx.lineWidth = 2;
+                animObjs.forEach(p => {
+                    ctx.globalAlpha = p.alpha;
+                    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + (Math.random()*20-10), p.y+30); ctx.stroke();
+                    p.y += 10; if(p.y > canvas.height) p.y = 0;
+                });
+            } else if (tipoAnimacao === 'plasma') {
+                animObjs.forEach(p => {
+                    ctx.globalAlpha = p.alpha;
+                    ctx.beginPath();
+                    ctx.arc(canvas.width/2 + Math.sin(p.angle)*200, canvas.height/2 + Math.cos(p.angle)*200, p.size*3, 0, Math.PI*2);
+                    ctx.fill(); p.angle += 0.02;
+                });
+            } else if (tipoAnimacao === 'comets') {
+                animObjs.forEach(p => {
+                    ctx.globalAlpha = p.alpha;
+                    ctx.lineWidth = 3;
+                    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x-40, p.y-40); ctx.stroke();
+                    p.x -= 5; p.y += 5; if(p.x < 0 || p.y > canvas.height) { p.x = canvas.width + 50; p.y = -50; }
+                });
+            } else if (tipoAnimacao === 'hearts') {
+                ctx.font = '20px serif';
+                animObjs.forEach(p => {
+                    ctx.globalAlpha = p.alpha;
+                    ctx.fillText('💖', p.x, p.y);
+                    p.y -= 1.2; if(p.y < 0) p.y = canvas.height;
+                });
+            } else if (tipoAnimacao === 'laser') {
+                ctx.lineWidth = 2;
+                animObjs.forEach(p => {
+                    ctx.globalAlpha = p.alpha;
+                    ctx.beginPath(); ctx.moveTo(p.x, 0); ctx.lineTo(p.x, canvas.height); ctx.stroke();
+                    p.x += 2; if(p.x > canvas.width) p.x = 0;
+                });
+            } else if (tipoAnimacao === 'cometrain') {
+                animObjs.forEach(p => {
+                    ctx.globalAlpha = p.alpha;
+                    ctx.fillRect(p.x, p.y, p.size, p.size * 4);
+                    p.y += 3; if(p.y > canvas.height) p.y = 0;
+                });
+            } else if (tipoAnimacao === 'sparkles') {
+                animObjs.forEach(p => {
+                    ctx.globalAlpha = p.alpha;
+                    ctx.beginPath(); ctx.arc(p.x, p.y, p.size * 1.5, 0, Math.PI*2); ctx.fill();
+                    p.alpha += (Math.random() - 0.5) * 0.1;
+                });
+            } else if (tipoAnimacao === 'rings') {
+                ctx.lineWidth = 1.5;
+                animObjs.forEach(p => {
+                    ctx.globalAlpha = p.alpha;
+                    ctx.beginPath(); ctx.arc(p.x, p.y, p.size * 6, 0, Math.PI*2); ctx.stroke();
+                    p.size += 0.2; if(p.size > 25) p.size = 2;
+                });
+            } else if (tipoAnimacao === 'vortex') {
+                animObjs.forEach(p => {
+                    ctx.globalAlpha = p.alpha;
+                    ctx.beginPath(); ctx.arc(canvas.width/2 + Math.sin(p.angle)*p.x*0.5, canvas.height/2 + Math.cos(p.angle)*p.y*0.5, p.size, 0, Math.PI*2); ctx.fill();
+                    p.angle += 0.03;
+                });
+            } else if (tipoAnimacao === 'off') {
+                return;
+            }
+
+            animationFrameId = requestAnimationFrame(runAnimation);
+        }
+        runAnimation();
+
+        function mudarAnimacao(tipo) {
+            tipoAnimacao = tipo;
+            ['particles', 'matrix', 'stars', 'crowns', 'snow', 'fire', 'bubbles', 'rain', 'confetti', 'nebula', 'lightning', 'plasma', 'comets', 'hearts', 'laser', 'cometrain', 'sparkles', 'rings', 'vortex', 'off'].forEach(t => {
+                const btn = document.getElementById(`anim-${t}`);
+                if(btn) btn.classList.remove('active');
+            });
+            const activeBtn = document.getElementById(`anim-${tipo}`);
+            if(activeBtn) activeBtn.classList.add('active');
+            initAnimationObjects();
+            runAnimation();
+        }
+
+        function mudarCorCustomizada(corHex) {
+            document.documentElement.style.setProperty('--primary-color', corHex);
+            runAnimation();
+        }
+
+        function toggleModoSandbox() {
+            modoSandboxAtivo = !modoSandboxAtivo;
+            document.getElementById('statusSandbox').textContent = modoSandboxAtivo ? 'LIGADO 🟢' : 'DESLIGADO 🔴';
+            alert(modoSandboxAtivo ? "Modo Testador LIGADO! Clique em qualquer casa do tabuleiro para posicionar ou ciclar peças livremente." : "Modo Testador DESLIGADO!");
+            selectedPiece = null;
+            movimentosValidos = [];
+            renderBoard();
+        }
+
+        function esvaziarTabuleiro() {
+            board = Array(8).fill(null).map(() => Array(8).fill(''));
+            selectedPiece = null;
+            movimentosValidos = [];
+            renderBoard();
+            alert("Tabuleiro esvaziado! Use o Testador de Peças para montar o cenário que desejar.");
+        }
+
+        function zerarPlacares() {
+            vitoriasBrancas = 0;
+            vitoriasPretas = 0;
+            document.getElementById('scoreWhite').textContent = '0';
+            document.getElementById('scoreBlack').textContent = '0';
+            alert("Placares zerados!");
+        }
+
+        // ==========================================
+        // ♟️ LÓGICA DO XADREZ & REGRAS OFICIAIS
+        // ==========================================
+        const boardElement = document.getElementById('chessboard');
+        const statusElement = document.getElementById('gameStatus');
+        const restartBtn = document.getElementById('restartBtn');
+        const historyElement = document.getElementById('moveHistory');
+
+        let modoJogo = 'ai';
+        let dificuldadeIA = 'normal';
+
+        let board = [
+            ['♜','♞','♝','♛','♚','♝','♞','♜'],
+            ['♟','♟','♟','♟','♟','♟','♟','♟'],
+            ['','','','','','','',''],
+            ['','','','','','','',''],
+            ['','','','','','','',''],
+            ['','','','','','','',''],
+            ['♙','♙','♙','♙','♙','♙','♙','♙'],
+            ['♖','♘','♗','♕','♔','♗','♘','♖']
+        ];
+
+        let turn = 'white'; // 'white' ou 'black'
+        let selectedPiece = null;
+        let movimentosValidos = [];
+
+        function mudarModoJogo() {
+            modoJogo = document.getElementById('gameMode').value;
+            document.getElementById('containerDificuldade').style.display = (modoJogo === 'ai') ? 'block' : 'none';
+            restartBtn.click();
+        }
+
+        function mudarDificuldade() {
+            dificuldadeIA = document.getElementById('dificuldadeIA').value;
+        }
+
+        function isWhite(piece) {
+            if (!piece) return false;
+            let code = piece.charCodeAt(0);
+            return code >= 9812 && code <= 9817; // ♔♕♖♗♘♙
+        }
+
+        function isBlack(piece) {
+            if (!piece) return false;
+            let code = piece.charCodeAt(0);
+            return code >= 9818 && code <= 9823; // ♚♛♜♝♞♟
+        }
+
+        // Validador de Movimentos Oficiais do Xadrez
+        function obterMovimentosValidos(r, c, currentBoard) {
+            let piece = currentBoard[r][c];
+            if (!piece) return [];
+            let moves = [];
+            let white = isWhite(piece);
+
+            // 1. Peão (♙ Branca, ♟ Preta)
+            if (piece === '♙' || piece === '♟') {
+                let dir = white ? -1 : 1;
+                let startRow = white ? 6 : 1;
+
+                // Anda 1 casa pra frente
+                let nr = r + dir;
+                if (nr >= 0 && nr < 8 && !currentBoard[nr][c]) {
+                    moves.push({ r: nr, c: c });
+                    // Anda 2 casas no primeiro lance
+                    let nr2 = r + (dir * 2);
+                    if (r === startRow && !currentBoard[nr2][c]) {
+                        moves.push({ r: nr2, c: c });
+                    }
+                }
+
+                // Capturas na diagonal
+                for (let dc of [-1, 1]) {
+                    let nc = c + dc;
+                    if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+                        let target = currentBoard[nr][nc];
+                        if (target && (white ? isBlack(target) : isWhite(target))) {
+                            moves.push({ r: nr, c: nc });
+                        }
+                    }
+                }
+            }
+
+            // 2. Cavalo (♘ ou ♞)
+            else if (piece === '♘' || piece === '♞') {
+                let knightMoves = [
+                    [-2, -1], [-2, 1], [-1, -2], [-1, 2],
+                    [1, -2], [1, 2], [2, -1], [2, 1]
+                ];
+                knightMoves.forEach(([dr, dc]) => {
+                    let nr = r + dr, nc = c + dc;
+                    if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+                        let target = currentBoard[nr][nc];
+                        if (!target || (white ? isBlack(target) : isWhite(target))) {
+                            moves.push({ r: nr, c: nc });
+                        }
+                    }
+                });
+            }
+
+            // 3. Rei (♔ ou ♚)
+            else if (piece === '♔' || piece === '♚') {
+                let kingMoves = [
+                    [-1, -1], [-1, 0], [-1, 1],
+                    [0, -1], [0, 1],
+                    [1, -1], [1, 0], [1, 1]
+                ];
+                kingMoves.forEach(([dr, dc]) => {
+                    let nr = r + dr, nc = c + dc;
+                    if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+                        let target = currentBoard[nr][nc];
+                        if (!target || (white ? isBlack(target) : isWhite(target))) {
+                            moves.push({ r: nr, c: nc });
+                        }
+                    }
+                });
+            }
+
+            // 4. Bispo (♗ ou ♝) ou Dama (♕ ou ♛ parte diagonal)
+            if (piece === '♗' || piece === '♝' || piece === '♕' || piece === '♛') {
+                let directions = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
+                directions.forEach(([dr, dc]) => {
+                    let nr = r + dr, nc = c + dc;
+                    while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+                        let target = currentBoard[nr][nc];
+                        if (!target) {
+                            moves.push({ r: nr, c: nc });
+                        } else {
+                            if (white ? isBlack(target) : isWhite(target)) {
+                                moves.push({ r: nr, c: nc });
+                            }
+                            break;
+                        }
+                        nr += dr;
+                        nc += dc;
+                    }
+                });
+            }
+
+            // 5. Torre (♖ ou ♜) ou Dama (♕ ou ♛ parte reta)
+            if (piece === '♖' || piece === '♜' || piece === '♕' || piece === '♛') {
+                let directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+                directions.forEach(([dr, dc]) => {
+                    let nr = r + dr, nc = c + dc;
+                    while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+                        let target = currentBoard[nr][nc];
+                        if (!target) {
+                            moves.push({ r: nr, c: nc });
+                        } else {
+                            if (white ? isBlack(target) : isWhite(target)) {
+                                moves.push({ r: nr, c: nc });
+                            }
+                            break;
+                        }
+                        nr += dr;
+                        nc += dc;
+                    }
+                });
+            }
+
+            return moves;
+        }
+
+        function renderBoard() {
+            boardElement.innerHTML = '';
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const square = document.createElement('div');
+                    square.classList.add('square');
+                    square.classList.add((r + c) % 2 === 0 ? 'light' : 'dark');
+                    square.dataset.row = r;
+                    square.dataset.col = c;
+                    
+                    const piece = board[r][c];
+                    if (piece) {
+                        const span = document.createElement('span');
+                        span.textContent = piece;
+                        span.className = isWhite(piece) ? 'piece-white' : 'piece-black';
+                        square.appendChild(span);
+                    }
+
+                    if (selectedPiece && selectedPiece.row === r && selectedPiece.col === c) {
+                        square.classList.add('selected');
+                    }
+
+                    if (movimentosValidos.some(m => m.r === r && m.c === c)) {
+                        square.classList.add('highlight');
+                    }
+
+                    square.addEventListener('click', () => handleSquareClick(r, c));
+                    boardElement.appendChild(square);
+                }
+            }
+        }
+
+        const sandboxPieces = ['', '♙', '♘', '♗', '♖', '♕', '♔', '♟', '♞', '♝', '♜', '♛', '♚'];
+
+        function handleSquareClick(r, c) {
+            if (modoSandboxAtivo) {
+                let atual = board[r][c];
+                let idx = sandboxPieces.indexOf(atual);
+                let proximo = sandboxPieces[(idx + 1) % sandboxPieces.length];
+                board[r][c] = proximo;
+                renderBoard();
+                return;
+            }
+
+            if (modoJogo === 'ai' && turn === 'black') return;
+
+            const piece = board[r][c];
+
+            if (selectedPiece) {
+                let moveMatch = movimentosValidos.find(m => m.r === r && m.c === c);
+                if (moveMatch) {
+                    const captured = board[r][c];
+                    board[r][c] = board[selectedPiece.row][selectedPiece.col];
+                    board[selectedPiece.row][selectedPiece.col] = '';
+                    
+                    if (captured) {
+                        if (isWhite(captured)) {
+                            document.getElementById('capturedWhite').textContent += captured + ' ';
+                        } else {
+                            document.getElementById('capturedBlack').textContent += captured + ' ';
+                        }
+                    }
+
+                    historyElement.innerHTML += `<div>(${selectedPiece.row},${selectedPiece.col}) ➔ (${r},${c})</div>`;
+                    historyElement.scrollTop = historyElement.scrollHeight;
+
+                    selectedPiece = null;
+                    movimentosValidos = [];
+                    turn = turn === 'white' ? 'black' : 'white';
+                    statusElement.textContent = turn === 'white' ? 'Vez das Brancas (⚪)' : 'Vez das Pretas (⚫)';
+                    renderBoard();
+
+                    if (modoJogo === 'ai' && turn === 'black') {
+                        setTimeout(jogarIA, 600);
+                    }
+                    return;
+                }
+            }
+
+            // Selecionar peça própria
+            if (piece && (turn === 'white' ? isWhite(piece) : isBlack(piece))) {
+                selectedPiece = { row: r, col: c };
+                movimentosValidos = obterMovimentosValidos(r, c, board);
+                renderBoard();
+            } else {
+                selectedPiece = null;
+                movimentosValidos = [];
+                renderBoard();
+            }
+        }
+
+        function jogarIA() {
+            if (turn !== 'black') return;
+
+            let todosMovimentos = [];
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    let p = board[r][c];
+                    if (isBlack(p)) {
+                        let mvs = obterMovimentosValidos(r, c, board);
+                        mvs.forEach(m => {
+                            todosMovimentos.push({ de: { r, c }, para: m, come: !!board[m.r][m.c] });
+                        });
+                    }
+                }
+            }
+
+            if (todosMovimentos.length === 0) return;
+
+            let escolha;
+            if (dificuldadeIA === 'facil') {
+                escolha = todosMovimentos[Math.floor(Math.random() * todosMovimentos.length)];
+            } else if (dificuldadeIA === 'normal' || dificuldadeIA === 'medio') {
+                let capturas = todosMovimentos.filter(m => m.come);
+                escolha = capturas.length > 0 ? capturas[Math.floor(Math.random() * capturas.length)] : todosMovimentos[Math.floor(Math.random() * todosMovimentos.length)];
+            } else {
+                let capturas = todosMovimentos.filter(m => m.come);
+                if (capturas.length > 0) {
+                    escolha = capturas[Math.floor(Math.random() * capturas.length)];
+                } else {
+                    todosMovimentos.sort((a, b) => b.para.r - a.para.r);
+                    escolha = todosMovimentos[0];
+                }
+            }
+
+            if (escolha) {
+                let captured = board[escolha.para.r][escolha.para.c];
+                board[escolha.para.r][escolha.para.c] = board[escolha.de.r][escolha.de.c];
+                board[escolha.de.r][escolha.de.c] = '';
+
+                if (captured) {
+                    document.getElementById('capturedBlack').textContent += captured + ' ';
+                }
+
+                historyElement.innerHTML += `<div>IA: (${escolha.de.r},${escolha.de.c}) ➔ (${escolha.para.r},${escolha.para.c})</div>`;
+                historyElement.scrollTop = historyElement.scrollHeight;
+
+                turn = 'white';
+                statusElement.textContent = 'Vez das Brancas (⚪)';
+                renderBoard();
+            }
+        }
+
+        restartBtn.addEventListener('click', () => {
+            board = [
+                ['♜','♞','♝','♛','♚','♝','♞','♜'],
+                ['♟','♟','♟','♟','♟','♟','♟','♟'],
+                ['','','','','','','',''],
+                ['','','','','','','',''],
+                ['','','','','','','',''],
+                ['','','','','','','',''],
+                ['♙','♙','♙','♙','♙','♙','♙','♙'],
+                ['♖','♘','♗','♕','♔','♗','♘','♖']
+            ];
+            turn = 'white';
+            selectedPiece = null;
+            movimentosValidos = [];
+            statusElement.textContent = 'Vez das Brancas (⚪)';
+            historyElement.innerHTML = '';
+            document.getElementById('capturedWhite').innerHTML = '';
+            document.getElementById('capturedBlack').innerHTML = '';
+            renderBoard();
+        });
+
+        renderBoard();
+    </script>
+</body>
+</html>
